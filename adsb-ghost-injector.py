@@ -108,7 +108,7 @@ def encode_altitude(altitude):
     qBit = 1 # Set the Q bit to indicate 25ft encoding, 0 would indicate Gillham encoding
     upper = (n & 0x7F0) << 1 # Upper 7 bits of N go into bits 1-7 of the altitude field
     qBitShifted = qBit << 4 # Q bit goes into bit 4 of the altitude field
-    lower = (n & 0x00F) << 1 # Lower 4 bits of N go into bits 5-8 of the altitude field
+    lower = (n & 0x00F) # Lower 4 bits of N go into bits 5-8 of the altitude field
     return (upper | qBitShifted | lower) & 0x1FFF # Return the final 13-bit altitude encoding
 
 
@@ -137,6 +137,22 @@ def encode_cpr(lat, lon, is_odd):
     lon_cpr = int((lon / d_lon - math.floor(lon / d_lon)) * 131072 + 0.5) % 131072
     return lat_cpr, lon_cpr
 
+# Build airborne position message (TC=11)
+def airborne_position_message(icao, altitude, lat, lon, is_odd):
+    tc = 11
+    surveillanceStatus = 0 # No condition change
+    nicSupplement = 0 # No supplementary information
+    altitude = encode_altitude(altitude)
+    timeFlag = 0 # 0 being not synchronized to UTC, 1 being synchronized to UTC.
+    fFlag = 1 if is_odd else 0 # F flag is set to 1 for odd frames and 0 for even frames
+    lat_cpr, lon_cpr = encode_cpr(lat, lon, is_odd)
+
+    # Time to asesmble the message. The payload for TC=11 is 56 bits, which we will construct as follows:
+    me = (tc << 52) | (surveillanceStatus << 50) | (nicSupplement << 49) | (altitude << 36) | (timeFlag << 35) | (fFlag << 34) | (lat_cpr << 17) | lon_cpr
+    me_bytes = me.to_bytes(7, 'big')
+    position_msg = header + encode_icao(icao) + me_bytes
+    position_msg_with_crc = append_crc(position_msg)
+    return position_msg_with_crc.hex().upper()
 
 
 
@@ -145,28 +161,23 @@ def encode_cpr(lat, lon, is_odd):
 # main
 if __name__ == "__main__":
     test_crc()
-    msg = build_callsign_message("AABBCC", "MARSEC")
-    print(f"Generated message: {msg}")
-    print(f"Length: {len(msg)} characters, {len(msg)//2} bytes")
+    callsignMsg = build_callsign_message("AABBCC", "MARSEC")
+    positionMsgOdd = airborne_position_message("AABBCC", 10000, 40.6966, -80.0122, is_odd=True)
+    positionMsgEven = airborne_position_message("AABBCC", 10000, 40.6966, -80.0122, is_odd=False)
+
 
     sock = connect('127.0.0.1', 30001)
     if sock:
         print("[+] Sending message...")
-        for i in range(5):
-            send(sock,msg)
-            print(f"[+] Message sent: {i+1}/30")
+        for i in range(30):
+            send(sock,positionMsgEven)
+            print(f"[+] Position Message (Even) sent: {i+1}/5")
+            send(sock,positionMsgOdd)
+            print(f"[+] Position Message (Odd) sent: {i+1}/5")
+            send(sock,callsignMsg)
+            print(f"[+] Callsign Message sent: {i+1}/5")
             time.sleep(1)
     
-        print("Attempting altitude encoding test...")
-        print(f"Encoded altitude for 5000ft: {encode_altitude(5000):013b} (binary), {encode_altitude(5000)} (decimal)")
-
-        print("Attempting CPR encoding test...")
-        lat_cpr, lon_cpr = encode_cpr(40.6959, 80.0117, is_odd=False)
-        print(f"Encoded even CPR for lat 40.6959, lon 80.0117: lat_cpr={lat_cpr}, lon_cpr={lon_cpr}")
-        lat_cpr_odd, lon_cpr_odd = encode_cpr(40.6959, 80.0117, is_odd=True)
-        print(f"Encoded odd CPR for lat 40.6959, lon 80.0117: lat_cpr={lat_cpr_odd}, lon_cpr={lon_cpr_odd}")
-
-
 
 
     input()
