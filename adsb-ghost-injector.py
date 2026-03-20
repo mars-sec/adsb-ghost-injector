@@ -1,5 +1,7 @@
 import socket
 import time
+import math
+
 
 #ADS-B header info
 
@@ -110,6 +112,33 @@ def encode_altitude(altitude):
     return (upper | qBitShifted | lower) & 0x1FFF # Return the final 13-bit altitude encoding
 
 
+# CPR encoding for position messages (TC=9 and TC=11) is more complex and requires latitude and longitude to be encoded into a 17-bit format.
+# CPR encoding is a bit more complex and is used for position messages (TC=9 and TC=11). It involves encoding latitude and longitude into a 17-bit format, which allows for efficient transmission of position data. 
+# The encoding process includes calculating the latitude and longitude indices based on the current position and the reference position, 
+# and then combining these indices into a single 17-bit value. This value is then included in the message payload along with other necessary information 
+# such as altitude and velocity. 
+# exploit.org has a great writeup on CPR encoding and ADS-B spoofing, which can be found here: https://blog.exploit.org/tag/ads-b/. Huge thanks to STERVA who write that up and provided a lot of the foundational knowledge for this project.
+# I will be implementing CPR encoding based on the information provided in that writeup, as well as the ADS-B specifications.
+
+# Also used throughout this function was https://mode-s.org/1090mhz/, which is an invaluable resource for understanding the technical details of ADS-B message formats and encoding. 
+# The actual ADS-B specifications can be found in the DO-260B document, which is available online and provides detailed information on message formats, encoding schemes, and 
+# other technical aspects of ADS-B, but is much more dry than the linked resources.
+
+def encode_cpr(lat, lon, is_odd):
+    d_lat = 360.0 / (60 - (1 if is_odd else 0))
+    lat_cpr = int((lat / d_lat - math.floor(lat / d_lat)) * 131072 + 0.5) % 131072 # These might seem like magic numbers, but they are derived from the CPR encoding process. 131072 is 2^17, which is the number of possible values for the 17-bit encoding.
+    if abs(lat) >= 87.0: # For latitudes above 87 degrees, the number of longitude zones is 1, meaning longitude is not encoded and can be set to 0.
+        nl = 1
+    else:
+        nl = math.floor(2 * math.pi / math.acos(1 - (1 - math.cos(math.pi / 30)) / math.cos(math.pi * lat /180) ** 2)) # This is a fixed formula from the ADS-B specifications to calculate the number of longitude zones based on latitude.
+        
+    n = max(1, nl - (1 if is_odd else 0))
+    d_lon = 360.0 / n
+    lon_cpr = int((lon / d_lon - math.floor(lon / d_lon)) * 131072 + 0.5) % 131072
+    return lat_cpr, lon_cpr
+
+
+
 
 # Ghost aircraft class
 
@@ -130,5 +159,14 @@ if __name__ == "__main__":
     
         print("Attempting altitude encoding test...")
         print(f"Encoded altitude for 5000ft: {encode_altitude(5000):013b} (binary), {encode_altitude(5000)} (decimal)")
+
+        print("Attempting CPR encoding test...")
+        lat_cpr, lon_cpr = encode_cpr(40.6959, 80.0117, is_odd=False)
+        print(f"Encoded even CPR for lat 40.6959, lon 80.0117: lat_cpr={lat_cpr}, lon_cpr={lon_cpr}")
+        lat_cpr_odd, lon_cpr_odd = encode_cpr(40.6959, 80.0117, is_odd=True)
+        print(f"Encoded odd CPR for lat 40.6959, lon 80.0117: lat_cpr={lat_cpr_odd}, lon_cpr={lon_cpr_odd}")
+
+
+
 
     input()
