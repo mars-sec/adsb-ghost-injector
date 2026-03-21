@@ -1,3 +1,4 @@
+from pyexpat.errors import messages
 import socket
 import time
 import math
@@ -29,19 +30,6 @@ def append_crc(msg):
     byte3 = crc & 0xFF
     return msg + bytes([byte1, byte2, byte3])
     
-
-
-# Example of a live ADS-B message
-def test_crc():
-    msg = "8DADB72399955B0DB064A8BADE7D"
-
-    data = bytes.fromhex(msg[:22])
-    expected_crc = msg[22:]
-
-    result = crc24(data)
-    print(f"Got:            {result:06X}")
-    print(f"Expected:       {expected_crc}")
-    print(f"Match:          {expected_crc.upper() == f'{result:06X}'}")
 
 # TCP connect and send
 def connect(host, port):
@@ -186,27 +174,70 @@ def velocity_message(icao, speed_kts, heading_deg, vrate_fpm):
 
 # Ghost aircraft class
 
+class GhostAircraft:
+    def __init__(self, icao, callsign, lat, lon, altitude, speed_kts, heading_deg, vrate_fpm):
+        self.icao = icao
+        self.callsign = callsign
+        self.lat = lat
+        self.lon = lon
+        self.altitude = altitude
+        self.speed_kts = speed_kts
+        self.heading_deg = heading_deg
+        self.vrate_fpm = vrate_fpm
+        self.tick = 0
+
+
+    def update_position(self, dt_sec):
+        distance_nm = self.speed_kts * (dt_sec / 3600) # Distance traveled in nautical miles
+        d_lat = distance_nm * math.cos(math.radians(self.heading_deg)) / 60 # Change in latitude, converted from nautical miles to degrees
+        d_lon = distance_nm * math.sin(math.radians(self.heading_deg)) / (60 * math.cos(math.radians(self.lat))) # Change in longitude, adjusted for latitude
+        self.lat += d_lat
+        self.lon += d_lon
+        self.altitude += (self.vrate_fpm * dt_sec) / 60 # Change in altitude, converted from feet per minute to feet
+        self.tick += 1
+    
+    def get_messages(self):
+        messages = []
+        is_odd = bool(self.tick % 2)
+        messages.append(airborne_position_message(self.icao, self.altitude, self.lat, self.lon, is_odd))
+        if self.tick % 3 == 0: # Send velocity message every 3 ticks to reduce bandwidth, as velocity doesn't need to be updated as frequently as position
+            messages.append(velocity_message(self.icao, self.speed_kts, self.heading_deg, self.vrate_fpm))
+        if self.tick % 5 == 0: # Send callsign message every 5 ticks, as callsign doesn't change and doesn't need to be sent frequently
+            messages.append(build_callsign_message(self.icao, self.callsign))
+        
+        return messages
+
+
+
+
+
 # main
 if __name__ == "__main__":
-    test_crc()
-    callsignMsg = build_callsign_message("AABBCC", "MARSEC")
-    positionMsgOdd = airborne_position_message("AABBCC", 10000, 40.6966, -80.0122, is_odd=True)
-    positionMsgEven = airborne_position_message("AABBCC", 10000, 40.6966, -80.0122, is_odd=False)
-    velocityMsg = velocity_message("AABBCC", 100, 200, -500)
+    
+    ghost = GhostAircraft(
+        icao="ABC123",
+        callsign="MARSEC",
+        lat=40.6966,
+        lon=-80.0122,
+        altitude=10000,
+        speed_kts=100,
+        heading_deg=90,
+        vrate_fpm=0
+    )
 
     sock = connect('127.0.0.1', 30001)
     if sock:
-        print("[+] Sending message...")
-        for i in range(30):
-            send(sock,positionMsgEven)
-            print(f"[+] Position Message (Even) sent: {i+1}/5")
-            send(sock,positionMsgOdd)
-            print(f"[+] Position Message (Odd) sent: {i+1}/5")
-            send(sock,callsignMsg)
-            print(f"[+] Callsign Message sent: {i+1}/5")
-            send(sock,velocityMsg)
-            print(f"[+] Velocity Message sent: {i+1}/5")
-            time.sleep(1)
+        print("[+] Starting message injection...")
+        try:
+            while True:
+                for msg in ghost.get_messages():
+                    send(sock, msg)
+                ghost.update_position(1) # Update position every second
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n[+] Stopping injection and closing connection.")
+        finally:
+            sock.close()
     
 
 
