@@ -214,15 +214,24 @@ class GhostAircraft:
 # main
 if __name__ == "__main__":
     
+    icaoInput = input("Enter ICAO (6 hex digits): ")
+    callsignInput = input("Enter Callsign (8 characters max): ")
+    latInput = float(input("Enter Latitude (decimal degrees): "))
+    lonInput = float(input("Enter Longitude (decimal degrees): "))
+    altitudeInput = int(input("Enter Altitude (feet): "))
+    speedInput = int(input("Enter Speed (knots): "))
+    headingInput = int(input("Enter Heading (degrees): "))
+    vrateInput = int(input("Enter Vertical Rate (feet per minute): "))
+
     ghost = GhostAircraft(
-        icao="ABC123",
-        callsign="MARSEC",
-        lat=40.6966,
-        lon=-80.0122,
-        altitude=10000,
-        speed_kts=100,
-        heading_deg=90,
-        vrate_fpm=0
+        icao=icaoInput,
+        callsign=callsignInput,
+        lat=latInput,
+        lon=lonInput,
+        altitude=altitudeInput,
+        speed_kts=speedInput,
+        heading_deg=headingInput,
+        vrate_fpm=vrateInput
     )
 
     sock = connect('127.0.0.1', 30001)
