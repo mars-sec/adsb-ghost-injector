@@ -154,6 +154,34 @@ def airborne_position_message(icao, altitude, lat, lon, is_odd):
     position_msg_with_crc = append_crc(position_msg)
     return position_msg_with_crc.hex().upper()
 
+# Velocity messages (TC=19)
+def velocity_message(icao, speed_kts, heading_deg, vrate_fpm):
+
+    heading_rad = math.radians(heading_deg)
+    vew = int(speed_kts * math.sin(heading_rad))
+    vns = int(speed_kts * math.cos(heading_rad))
+    # ME structure for velocity messages is as follows:
+    tc = 19
+    subtype = 1 # Subtype 1 is for airspeed in knots, subtype 2 is for airspeed in km/h, and subtype 3 is for ground speed in knots.
+    intent = 0 # No intent change
+    reserved = 0 # Reserved bit, set to 0
+    dew = 1 if vew < 0 else 0 # 0 for eastward velocity, 1 for westward velocity
+    vew_raw = (abs(vew) + 1) & 0x3FF # 10 bits for velocity magnitude, we add 1 to ensure that we can represent 0-1023 knots
+    dns = 1 if vns < 0 else 0 # 0 for northward velocity, 1 for southward velocity
+    vns_raw = (abs(vns) + 1) & 0x3FF # 10 bits for velocity magnitude, we add 1 to ensure that we can represent 0-1023 knots
+    vrate_source = 0 # 0 for barometric altitude, 1 for geometric altitude
+    vrate_sign = 1 if vrate_fpm < 0 else 0 # 0 for climbing, 1 for descending
+    vrate_raw = (abs(vrate_fpm) // 64 + 1) & 0x1FF # 9 bits for vertical rate, we divide by 64 to convert from feet per minute to the 64 fpm resolution used in the message, and add 1 to ensure we can represent 0-511 (which corresponds to 0-32768 fpm)
+
+
+    # Bit shifts slightly different from the other messages due to the binary representation of TC
+    me = (tc << 51) | (subtype << 48) | (intent << 47) | (reserved << 46) | (dew << 45) | (vew_raw << 35) | (dns << 34) | (vns_raw << 24) | (vrate_source << 23) | (vrate_sign << 22) | (vrate_raw << 13) # The remaining bits are reserved and set to 0
+    me_bytes = me.to_bytes(7, 'big')
+    velocity_msg = header + encode_icao(icao) + me_bytes
+    return append_crc(velocity_msg).hex().upper()
+
+
+
 
 
 # Ghost aircraft class
@@ -164,7 +192,7 @@ if __name__ == "__main__":
     callsignMsg = build_callsign_message("AABBCC", "MARSEC")
     positionMsgOdd = airborne_position_message("AABBCC", 10000, 40.6966, -80.0122, is_odd=True)
     positionMsgEven = airborne_position_message("AABBCC", 10000, 40.6966, -80.0122, is_odd=False)
-
+    velocityMsg = velocity_message("AABBCC", 100, 200, -500)
 
     sock = connect('127.0.0.1', 30001)
     if sock:
@@ -176,6 +204,8 @@ if __name__ == "__main__":
             print(f"[+] Position Message (Odd) sent: {i+1}/5")
             send(sock,callsignMsg)
             print(f"[+] Callsign Message sent: {i+1}/5")
+            send(sock,velocityMsg)
+            print(f"[+] Velocity Message sent: {i+1}/5")
             time.sleep(1)
     
 
