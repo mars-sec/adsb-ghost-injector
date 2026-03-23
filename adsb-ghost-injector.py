@@ -9,6 +9,9 @@ References:
                     I really did not reference this document directly that much, but it is the ultimate source of truth for how ADS-B messages are structured and encoded.
     https://mode-s.org/1090mhz/ - An invaluable resource for understanding the technical details of ADS-B message formats and encoding.
     https://blog.exploit.org/tag/ads-b/ - A great couple of writeups on CPR encoding and ADS-B spoofing, which provided a lot of the foundational knowledge for this project.
+
+    Check out my blog post for more information and detail :) 
+    https://www.marshallyanis.com/projects/ads-b_ghost_injector
 """
 
 
