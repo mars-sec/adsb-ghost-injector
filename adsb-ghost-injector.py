@@ -23,7 +23,7 @@ import math
 # ADS-B header info
 
 DOWNLINK_FORMAT = 17 # Extended Squitter
-CAPABILITY = 5 # Level 2 transponder
+CAPABILITY = 7 # Level 2 transponder
 HEADER = bytes([(DOWNLINK_FORMAT << 3) | CAPABILITY]) # capability occupies the bottom 3 bits of the first byte
 CRC24_GENERATOR = 0x1FFF409 # This is the generator polynomial for the CRC-24 used in ADS-B messages, represented as an integer.
 CPR_RESOLUTION = 131072 # This is 2^17, which is the number of possible values for the 17-bit encoding used in CPR encoding for position messages.
